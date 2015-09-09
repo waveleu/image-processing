@@ -170,3 +170,4 @@ void detect_and_draw(IplImage* img)//核心算法，可以进行准确率改进
 	cvReleaseImage(&small_img);
 
 }
+//45454545
