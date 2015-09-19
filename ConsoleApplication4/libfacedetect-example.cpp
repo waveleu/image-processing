@@ -29,8 +29,8 @@ int main(int argc, char** argv)
 	IplImage *frame, *frame_copy = 0;
 	int optlen = strlen("--cascade=");
 	const char* input_name;		
-	input_name = "C:\\Users\\swpu\\Documents\\Visual Studio 2013\\Projects\\视频人脸检测\\Debug\\face.flv";//视频文件地址
-	cascade_name = "D:\\software\\opencv\\sources\\data\\haarcascades\\haarcascade_frontalface_alt2.xml";	
+	input_name = ".\\face.mp4";//视频文件地址
+	cascade_name = "D:\\xuexi\\filis\\opencv\\sources\\data\\haarcascades\\haarcascade_frontalface_alt2.xml";	
 	cascade = (CvHaarClassifierCascade*)cvLoad(cascade_name, 0, 0, 0);
 
 	if (!cascade)
