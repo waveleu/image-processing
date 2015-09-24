@@ -10,163 +10,81 @@
 #include <limits.h>
 #include <time.h>
 #include <ctype.h>
-
-#ifdef _EiC
-#define WIN32
-#endif
-
-static CvMemStorage* storage = 0;
-static CvHaarClassifierCascade* cascade = 0;
-
-void detect_and_draw(IplImage* image);
-
-const char* cascade_name ="haarcascade_frontalface_alt.xml";
-/*    "haarcascade_profileface.xml";*/
-
 int main(int argc, char** argv)
 {
-	CvCapture* capture = 0;
-	IplImage *frame, *frame_copy = 0;
-	int optlen = strlen("--cascade=");
-	const char* input_name;		
-	input_name = "C:\\Users\\swpu\\Documents\\Visual Studio 2013\\Projects\\视频人脸检测\\Debug\\face.flv";//视频文件地址
-	cascade_name = "D:\\software\\opencv\\sources\\data\\haarcascades\\haarcascade_frontalface_alt2.xml";	
-	cascade = (CvHaarClassifierCascade*)cvLoad(cascade_name, 0, 0, 0);
-
-	if (!cascade)
+	IplImage* pFrame = NULL;
+	IplImage* pFrImg = NULL;
+	IplImage* pBkImg = NULL;
+	CvMat* pFrameMat = NULL;
+	CvMat* pFrMat = NULL;
+	CvMat* pBkMat = NULL;
+	CvCapture* pCapture = NULL;
+	int nFrmNum = 0;
+	//创建窗口  
+	cvNamedWindow("video", 1);
+	cvNamedWindow("background", 1);
+	cvNamedWindow("foreground", 1);
+	//使窗口有序排列  
+	cvMoveWindow("video", 30, 0);
+	cvMoveWindow("background", 360, 0);
+	cvMoveWindow("foreground", 690, 0);
+	pCapture = cvCaptureFromAVI("..//Debug//小区.mp4");   //读入已有视频用此句  
+	//pCapture = cvCaptureFromCAM(0);           //从摄像头读入视频用此  
+	while (pFrame = cvQueryFrame(pCapture))
 	{
-		fprintf(stderr, "ERROR: Could not load classifier cascade\n");
-		fprintf(stderr,
-			"Usage: facedetect --cascade=\"<cascade_path>\" [filename|camera_index]\n");
-		return -1;
-	}
-	storage = cvCreateMemStorage(0);
-
-	if (!input_name || (isdigit(input_name[0]) && input_name[1] == '\0'))
-		capture = cvCaptureFromCAM(!input_name ? 0 : input_name[0] - '0');
-	else
-		capture = cvCaptureFromAVI(input_name);//视频文件是否来自调用摄像头
-
-	cvNamedWindow("视频", 1);
-
-	if (capture)
-	{
-		for (;;)
+		pFrame->origin = 0;
+		nFrmNum++;
+		//如果是第一帧，需要申请内存，并初始化  
+		if (nFrmNum == 1)
 		{
-			if (!cvGrabFrame(capture))
-				break;
-			frame = cvRetrieveFrame(capture);
-			if (!frame)
-				break;
-			if (!frame_copy)
-				frame_copy = cvCreateImage(cvSize(frame->width, frame->height),
-				IPL_DEPTH_8U, frame->nChannels);
-			if (frame->origin == IPL_ORIGIN_TL)
-				cvCopy(frame, frame_copy, 0);
-			else
-				cvFlip(frame, frame_copy, 0);
-
-			detect_and_draw(frame_copy);
-
-			if (cvWaitKey(10) >= 0)
-				break;
-		}
-
-		cvReleaseImage(&frame_copy);
-		cvReleaseCapture(&capture);
-	}
-	else
-	{
-		const char* filename = input_name ? input_name : (char*)"lena.jpg";
-		IplImage* image = cvLoadImage(filename, 1);
-
-		if (image)
-		{
-			detect_and_draw(image);
-			cvWaitKey(0);
-			cvReleaseImage(&image);
+			pBkImg = cvCreateImage(cvSize(pFrame->width, pFrame->height), IPL_DEPTH_8U, 1);
+			pFrImg = cvCreateImage(cvSize(pFrame->width, pFrame->height), IPL_DEPTH_8U, 1);
+			pBkMat = cvCreateMat(pFrame->height, pFrame->width, CV_32FC1);
+			pFrMat = cvCreateMat(pFrame->height, pFrame->width, CV_32FC1);
+			pFrameMat = cvCreateMat(pFrame->height, pFrame->width, CV_32FC1);
+			//转化成单通道图像再处理  
+			cvCvtColor(pFrame, pBkImg, CV_BGR2GRAY);
+			cvCvtColor(pFrame, pFrImg, CV_BGR2GRAY);
+			cvConvert(pFrImg, pFrameMat);
+			cvConvert(pFrImg, pFrMat);
+			cvConvert(pFrImg, pBkMat);
 		}
 		else
 		{
-			/* assume it is a text file containing the
-			list of the image filenames to be processed - one per line */
-			FILE* f = fopen(filename, "rt");
-			if (f)
-			{
-				char buf[1000 + 1];
-				while (fgets(buf, 1000, f))
-				{
-					int len = (int)strlen(buf);
-					while (len > 0 && isspace(buf[len - 1]))
-						len--;
-					buf[len] = '\0';
-					image = cvLoadImage(buf, 1);
-					if (image)
-					{
-						detect_and_draw(image);
-						cvWaitKey(0);
-						cvReleaseImage(&image);
-					}
-				}
-				fclose(f);
-			}
-		}
-
-	}
-
-	cvDestroyWindow("视频");
-
-	return 0;
-}
-
-void detect_and_draw(IplImage* img)//核心算法，可以进行准确率改进
-{
-	static CvScalar colors[] =
-	{
-		{ { 0, 0, 255 } },
-		{ { 0, 128, 255 } },
-		{ { 0, 255, 255 } },
-		{ { 0, 255, 0 } },
-		{ { 255, 128, 0 } },
-		{ { 255, 255, 0 }},
-		{ { 255, 0, 0 } },
-		{ { 255, 0, 255 } }
-	};
-
-	double scale = 1.3;
-	IplImage* gray = cvCreateImage(cvSize(img->width, img->height), 8, 1);
-	IplImage* small_img = cvCreateImage(cvSize(cvRound(img->width / scale),
-		cvRound(img->height / scale)),
-		8, 1);
-	int i;
-
-	cvCvtColor(img, gray, CV_BGR2GRAY);
-	cvResize(gray, small_img, CV_INTER_LINEAR);
-	cvEqualizeHist(small_img, small_img);
-	cvClearMemStorage(storage);
-
-	if (cascade)
-	{
-		double t = (double)cvGetTickCount();
-		CvSeq* faces = cvHaarDetectObjects(small_img, cascade, storage,
-			1.1, 2, 0/*CV_HAAR_DO_CANNY_PRUNING*/,
-			cvSize(30, 30));
-		t = (double)cvGetTickCount() - t;
-		printf("detection time = %gms\n", t / ((double)cvGetTickFrequency()*1000.));
-		for (i = 0; i < (faces ? faces->total : 0); i++)
-		{
-			CvRect* r = (CvRect*)cvGetSeqElem(faces, i);
-			CvPoint center;
-			int radius;
-			center.x = cvRound((r->x + r->width*0.5)*scale);
-			center.y = cvRound((r->y + r->height*0.5)*scale);
-			radius = cvRound((r->width + r->height)*0.25*scale);
-			cvCircle(img, center, radius, colors[i % 8], 3, 8, 0);
+			cvCvtColor(pFrame, pFrImg, CV_BGR2GRAY);
+			cvConvert(pFrImg, pFrameMat);
+			//先做高斯滤波，以平滑图像  
+			cvSmooth(pFrameMat, pFrameMat, CV_GAUSSIAN, 3, 0, 0);
+			//当前帧跟背景图相减  
+			cvAbsDiff(pFrameMat, pBkMat, pFrMat);
+			//二值化前景图  
+			cvThreshold(pFrMat, pFrImg, 10, 255.0, CV_THRESH_BINARY);
+			//更新背景  
+			cvRunningAvg(pFrameMat, pBkMat, 0.003, 0);
+			//将背景转化为图像格式，用以显示  
+			cvConvert(pBkMat, pBkImg);
+			//pFrame->origin = IPL_ORIGIN_BL;
+			//pFrImg->origin = IPL_ORIGIN_BL;
+			//pBkImg->origin = IPL_ORIGIN_BL;
+			cvShowImage("video", pFrame);
+			cvShowImage("background", pBkImg);
+			cvShowImage("foreground", pFrImg);
+			//如果有按键事件，则跳出循环  
+			//此等待也为cvShowImage函数提供时间完成显示  
+			//等待时间可以根据CPU速度调整  
+			if (cvWaitKey(2) >= 0)
+				break;
 		}
 	}
-
-	cvShowImage("视频", img);
-	cvReleaseImage(&gray);
-	cvReleaseImage(&small_img);
-
+	//销毁窗口  
+	cvDestroyWindow("video");
+	cvDestroyWindow("background");
+	cvDestroyWindow("foreground");
+	//释放图像和矩阵  
+	cvReleaseImage(&pFrImg);
+	cvReleaseImage(&pBkImg);
+	cvReleaseMat(&pFrameMat);
+	cvReleaseMat(&pFrMat);
+	cvReleaseMat(&pBkMat);
+	cvReleaseCapture(&pCapture);
 }
